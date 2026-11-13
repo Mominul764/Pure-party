@@ -1,0 +1,118 @@
+import { EconomyConfig, LuckyClaim, UserProfile } from '../types/architecture';
+
+export interface GiftSplitBreakdown {
+  totalCoins: number;
+  receiverCoinBack: number; // 40%
+  platformCommission: number; // 15%
+  luckyPoolTotal: number; // 5%
+  seatSpTotal: number; // 2%
+  seatSpAllocations: [number, number, number]; // Split across 3 seats
+  systemReserve: number; // Remaining 38%
+}
+
+export function calculateGiftSplit(
+  totalCoins: number,
+  config: EconomyConfig
+): GiftSplitBreakdown {
+  const receiverCoinBack = Math.round((totalCoins * config.receiverCoinBackPct) / 100);
+  const platformCommission = Math.round((totalCoins * config.platformCommissionPct) / 100);
+  const luckyPoolTotal = Math.round((totalCoins * config.luckyPoolPct) / 100);
+  const seatSpTotal = Math.round((totalCoins * config.seatSpSplitPct) / 100);
+
+  const basePerSeat = Math.floor(seatSpTotal / 3);
+  const remainder = seatSpTotal - basePerSeat * 3;
+  const seatSpAllocations: [number, number, number] = [
+    basePerSeat + (remainder >= 1 ? 1 : 0),
+    basePerSeat + (remainder >= 2 ? 1 : 0),
+    basePerSeat,
+  ];
+
+  const systemReserve = Math.max(
+    0,
+    totalCoins - receiverCoinBack - platformCommission - luckyPoolTotal - seatSpTotal
+  );
+
+  return {
+    totalCoins,
+    receiverCoinBack,
+    platformCommission,
+    luckyPoolTotal,
+    seatSpTotal,
+    seatSpAllocations,
+    systemReserve,
+  };
+}
+
+export function canHideId(user: UserProfile, isBoatOwner: boolean): boolean {
+  return isBoatOwner || user.vipLevel >= 5;
+}
+
+export function canCreateCustom1MGift(user: UserProfile): boolean {
+  return user.svpLevel >= 4 || user.level >= 150;
+}
+
+export function formatUidDisplay(uid: string, isHidden: boolean): string {
+  if (!isHidden) return `UID ${uid}`;
+  return `UID ••••${uid.slice(-2)} (Hidden)`;
+}
+
+export function formatCoins(value: number): string {
+  if (value >= 1_000_000_000) {
+    const b = value / 1_000_000_000;
+    return `${Number.isInteger(b) ? b : b.toFixed(2)}B`;
+  }
+  if (value >= 1_000_000) {
+    const m = value / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(2)}M`;
+  }
+  return value.toLocaleString('en-US');
+}
+
+export function formatMillionsLabel(value: number): string {
+  const millions = value / 1_000_000;
+  return `${millions.toLocaleString('en-US')}M`;
+}
+
+export function computeSingleLuckyClaim(
+  remainingPool: number,
+  remainingSlots: number
+): number {
+  if (remainingSlots <= 1) return remainingPool;
+  const avg = remainingPool / remainingSlots;
+  const minVal = Math.max(1, Math.floor(avg * 0.45));
+  const maxVal = Math.max(minVal + 1, Math.floor(avg * 1.65));
+  const raw = Math.floor(minVal + Math.random() * (maxVal - minVal + 1));
+  const maxAllowed = remainingPool - (remainingSlots - 1);
+  return Math.max(1, Math.min(raw, maxAllowed));
+}
+
+export function simulateRemainingClaims(
+  remainingPool: number,
+  currentClaimsCount: number,
+  catcherLimit: number
+): LuckyClaim[] {
+  const generated: LuckyClaim[] = [];
+  let poolLeft = remainingPool;
+  const slotsToFill = Math.max(0, catcherLimit - currentClaimsCount);
+
+  for (let i = 0; i < slotsToFill; i++) {
+    const remainingSlots = slotsToFill - i;
+    const payout = computeSingleLuckyClaim(poolLeft, remainingSlots);
+    poolLeft -= payout;
+    const slotNum = currentClaimsCount + i + 1;
+    generated.push({
+      id: `claim-sim-${Date.now()}-${slotNum}`,
+      claimerName: `Catcher #${slotNum}`,
+      claimerUid: String(40001000 + slotNum * 137),
+      amount: payout,
+      claimedAt: new Date().toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
+    });
+  }
+
+  return generated;
+}

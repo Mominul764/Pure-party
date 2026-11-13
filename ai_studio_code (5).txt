@@ -1,0 +1,227 @@
+export type AppSection =
+  | 'boat'
+  | 'gifts'
+  | 'progression'
+  | 'social'
+  | 'controls';
+
+export type RoleType =
+  | 'Master'
+  | 'SuperAdmin'
+  | 'Admin'
+  | 'BoatOwner'
+  | 'Merchant'
+  | 'CSSupport';
+
+export interface EconomyConfig {
+  receiverCoinBackPct: number; // Default 40%
+  platformCommissionPct: number; // Default 15%
+  luckyPoolPct: number; // Default 5%
+  seatSpSplitPct: number; // Default 2% across 3 seats
+  minCatcherLimit: number; // Default 10
+  maxCatcherLimit: number; // Default 50
+  rechargeBonusMultiplier: number; // Default 10x
+}
+
+export interface UserProfile {
+  uid: string;
+  name: string;
+  avatarUrl: string;
+  level: number; // 1 to 200
+  xp: number;
+  vipLevel: number; // 0 to 5 (Hide ID unlocked at 5)
+  svpLevel: number; // 0 to 15 (Custom 1M Gift unlocked at 4+)
+  cumulativeRechargeUsd: number; // $0 to $20,000 ceiling
+  hideIdEnabled: boolean;
+  coinBalance: number;
+  spBalance: number;
+  familyId: string | null;
+  cpTier: number; // 0 to 15
+  friendshipLevel: number; // 0 to 10
+  isFollowingHost: boolean;
+}
+
+export type GiftCategory = 'Standard' | 'Rocket' | 'LuckyBack' | 'Custom';
+
+export interface GiftTier {
+  id: string;
+  tier: number; // 1 to 100 (or 101+ for custom)
+  name: string;
+  category: GiftCategory;
+  coinCost: number;
+  isRocket: boolean;
+  isLuckyBack: boolean;
+  defaultCatcherLimit: number; // 10 to 50
+  xpYield: number;
+  spYield: number;
+  creatorName?: string;
+}
+
+export interface LuckyClaim {
+  id: string;
+  claimerName: string;
+  claimerUid: string;
+  amount: number;
+  claimedAt: string;
+}
+
+export interface RocketLaunchEvent {
+  id: string;
+  giftName: string;
+  category: GiftCategory;
+  senderName: string;
+  senderUid: string;
+  senderMasked: boolean;
+  totalCoins: number;
+  receiverCoinBack: number;
+  platformCommission: number;
+  luckyPoolTotal: number;
+  luckyPoolRemaining: number;
+  seatSpTotal: number;
+  seatSpAllocations: [number, number, number];
+  systemReserve: number;
+  catcherLimit: number;
+  claims: LuckyClaim[];
+  status: 'Launching' | 'ActivePool' | 'Completed';
+  launchedAt: string;
+}
+
+export interface BoatSeat {
+  seatNumber: 1 | 2 | 3;
+  occupantName: string | null;
+  occupantUid: string | null;
+  avatarUrl: string | null;
+  isMuted: boolean;
+  spEarned: number;
+}
+
+export interface BoatRoomState {
+  roomId: string;
+  roomName: string;
+  hostName: string;
+  hostUid: string;
+  hostAvatarUrl: string;
+  hostLevel: number;
+  hostSvp: number;
+  hostVip: number;
+  isLocked: boolean;
+  lockPin: string;
+  ownerHideId: boolean;
+  viewerCount: number;
+  totalReceiverCoinBack: number;
+  seats: [BoatSeat, BoatSeat, BoatSeat];
+  chatMessages: RoomChatMessage[];
+}
+
+export interface RoomChatMessage {
+  id: string;
+  senderName: string;
+  senderUid: string;
+  isMasked: boolean;
+  text: string;
+  timestamp: string;
+  type: 'chat' | 'gift' | 'system';
+}
+
+export interface LevelSpec {
+  level: number;
+  bracket: string;
+  xpRequired: number;
+  cumulativeXp: number;
+  unlockNote: string;
+}
+
+export interface VipSpec {
+  level: number;
+  title: string;
+  cumulativeUsdRequired: number;
+  coinReward: number;
+  hideIdUnlocked: boolean;
+  entryEffect: string;
+  perks: string;
+}
+
+export interface SvpSpec {
+  level: number;
+  title: string;
+  cumulativeUsdRequired: number;
+  coinReward: number;
+  customGiftUnlocked: boolean;
+  giftBonusMultiplier: string;
+  perks: string;
+}
+
+export interface CpTierSpec {
+  tier: number;
+  title: string;
+  requiredSp: number;
+  emblem: string;
+  seatBonus: string;
+  perks: string;
+}
+
+export interface FriendshipSpec {
+  level: number;
+  title: string;
+  requiredXp: number;
+  videoCallPerk: string;
+  luckyDropPerk: string;
+}
+
+export interface FamilyMember {
+  uid: string;
+  name: string;
+  role: 'Patriarch' | 'Elder' | 'Captain' | 'Member';
+  level: number;
+  contributionCoins: number;
+}
+
+export interface FamilyEntity {
+  id: string;
+  name: string;
+  tag: string;
+  familyLevel: number;
+  treasuryCoins: number;
+  rocketWins: number;
+  members: FamilyMember[];
+}
+
+export interface RechargePackage {
+  id: string;
+  brand: 'PURE';
+  cardCode: string;
+  label: string;
+  usdPrice: number;
+  baseCoins: number;
+  bonusMultiplier: number; // 10x
+  bonusCoins: number;
+  totalCoins: number;
+}
+
+export interface SupportTicket {
+  id: string;
+  userUid: string;
+  userName: string;
+  category: 'Recharge 10x' | 'Lucky Pool' | 'Hide ID / VIP' | 'Video Call' | 'Boat Lock';
+  summary: string;
+  status: 'Open' | 'Investigating' | 'Resolved';
+  createdAt: string;
+}
+
+export interface MerchantTransaction {
+  id: string;
+  merchantName: string;
+  targetUid: string;
+  baseCoins: number;
+  bonusCoins: number;
+  totalCredited: number;
+  timestamp: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorRole: RoleType;
+  action: string;
+  target: string;
+  timestamp: string;
+}

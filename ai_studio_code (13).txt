@@ -1,0 +1,640 @@
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import { BoatRoomView } from './components/BoatRoomView';
+import { ControlPanelsView } from './components/ControlPanelsView';
+import { GiftAndCustomStudio } from './components/GiftAndCustomStudio';
+import { ProgressionSystemsView } from './components/ProgressionSystemsView';
+import { SocialFamilyView } from './components/SocialFamilyView';
+import { TopBar } from './components/TopBar';
+import {
+  DEFAULT_ECONOMY_CONFIG,
+  GIFT_TIERS,
+  INITIAL_BOAT_ROOM,
+  INITIAL_FAMILIES,
+  INITIAL_MERCHANT_TXS,
+  INITIAL_TICKETS,
+  INITIAL_USER,
+  RECHARGE_CEILING_USD,
+  RECHARGE_PACKAGES,
+  SVP_SPECS,
+  VIP_SPECS,
+} from './data/economySpecs';
+import {
+  AppSection,
+  AuditLogEntry,
+  BoatRoomState,
+  EconomyConfig,
+  FamilyEntity,
+  GiftTier,
+  MerchantTransaction,
+  RocketLaunchEvent,
+  RoleType,
+  SupportTicket,
+  UserProfile,
+} from './types/architecture';
+import {
+  calculateGiftSplit,
+  canCreateCustom1MGift,
+  canHideId,
+  computeSingleLuckyClaim,
+  formatCoins,
+  formatMillionsLabel,
+  formatUidDisplay,
+  simulateRemainingClaims,
+} from './utils/economyMath';
+
+function nowTime(): string {
+  return new Date().toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+export default function App() {
+  const [activeSection, setActiveSection] = useState<AppSection>('boat');
+  const [economy, setEconomy] = useState<EconomyConfig>(DEFAULT_ECONOMY_CONFIG);
+  const [user, setUser] = useState<UserProfile>(INITIAL_USER);
+  const [room, setRoom] = useState<BoatRoomState>(INITIAL_BOAT_ROOM);
+  const [gifts, setGifts] = useState<GiftTier[]>(GIFT_TIERS);
+  const [activeRocket, setActiveRocket] = useState<RocketLaunchEvent | null>(null);
+  const [launchHistory, setLaunchHistory] = useState<RocketLaunchEvent[]>([]);
+  const [families, setFamilies] = useState<FamilyEntity[]>(INITIAL_FAMILIES);
+  const [tickets, setTickets] = useState<SupportTicket[]>(INITIAL_TICKETS);
+  const [merchantTxs, setMerchantTxs] =
+    useState<MerchantTransaction[]>(INITIAL_MERCHANT_TXS);
+  const [activeRole, setActiveRole] = useState<RoleType>('Master');
+  const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
+    {
+      id: 'aud-1',
+      actorRole: 'Master',
+      action: 'Initialized 40/15/5/2 economy split and 10x recharge bonus',
+      target: 'Global Engine',
+      timestamp: '20:10:00',
+    },
+  ]);
+
+  const appendAudit = (role: RoleType, action: string, target: string) => {
+    setAuditLogs((prev) => [
+      {
+        id: `aud-${Date.now()}`,
+        actorRole: role,
+        action,
+        target,
+        timestamp: nowTime(),
+      },
+      ...prev,
+    ]);
+  };
+
+  const handleLaunchGift = (gift: GiftTier, catcherLimit: number) => {
+    if (user.coinBalance < gift.coinCost) return;
+    const clampedCatchers = Math.min(
+      economy.maxCatcherLimit,
+      Math.max(economy.minCatcherLimit, catcherLimit)
+    );
+    const split = calculateGiftSplit(gift.coinCost, economy);
+    const senderMasked = user.hideIdEnabled && canHideId(user, false);
+
+    setUser((prev) => {
+      const nextXp = prev.xp + gift.xpYield;
+      const levelBump = gift.coinCost >= 5_000_000 ? 1 : 0;
+      return {
+        ...prev,
+        coinBalance: prev.coinBalance - gift.coinCost,
+        xp: nextXp,
+        level: Math.min(200, prev.level + levelBump),
+      };
+    });
+
+    setRoom((prev) => {
+      const updatedSeats = prev.seats.map((seat, idx) => ({
+        ...seat,
+        spEarned: seat.spEarned + split.seatSpAllocations[idx],
+      })) as BoatRoomState['seats'];
+
+      return {
+        ...prev,
+        totalReceiverCoinBack: prev.totalReceiverCoinBack + split.receiverCoinBack,
+        seats: updatedSeats,
+        chatMessages: [
+          ...prev.chatMessages,
+          {
+            id: `gift-msg-${Date.now()}`,
+            senderName: user.name,
+            senderUid: user.uid,
+            isMasked: senderMasked,
+            text: `Launched ${gift.name} (${gift.coinCost.toLocaleString()} coins) · ${split.receiverCoinBack.toLocaleString()} host coin-back · ${split.luckyPoolTotal.toLocaleString()} lucky pool (${clampedCatchers} slots).`,
+            timestamp: nowTime().slice(0, 5),
+            type: 'gift',
+          },
+        ],
+      };
+    });
+
+    const launchEvent: RocketLaunchEvent = {
+      id: `launch-${Date.now()}`,
+      giftName: gift.name,
+      category: gift.category,
+      senderName: user.name,
+      senderUid: user.uid,
+      senderMasked,
+      totalCoins: gift.coinCost,
+      receiverCoinBack: split.receiverCoinBack,
+      platformCommission: split.platformCommission,
+      luckyPoolTotal: split.luckyPoolTotal,
+      luckyPoolRemaining: split.luckyPoolTotal,
+      seatSpTotal: split.seatSpTotal,
+      seatSpAllocations: split.seatSpAllocations,
+      systemReserve: split.systemReserve,
+      catcherLimit: clampedCatchers,
+      claims: [],
+      status: 'ActivePool',
+      launchedAt: nowTime(),
+    };
+
+    setActiveRocket(launchEvent);
+    setLaunchHistory((prev) => [launchEvent, ...prev]);
+    setActiveSection('boat');
+  };
+
+  const handleClaimLuckyDrop = () => {
+    if (!activeRocket) return;
+    if (activeRocket.claims.length >= activeRocket.catcherLimit) return;
+    if (activeRocket.claims.some((c) => c.claimerUid === user.uid)) return;
+
+    const remainingSlots =
+      activeRocket.catcherLimit - activeRocket.claims.length;
+    const payout = computeSingleLuckyClaim(
+      activeRocket.luckyPoolRemaining,
+      remainingSlots
+    );
+
+    const newClaim = {
+      id: `claim-${Date.now()}`,
+      claimerName: user.name,
+      claimerUid: user.uid,
+      amount: payout,
+      claimedAt: nowTime(),
+    };
+
+    const nextRemaining = activeRocket.luckyPoolRemaining - payout;
+    const nextClaims = [...activeRocket.claims, newClaim];
+    const isCompleted = nextClaims.length >= activeRocket.catcherLimit;
+
+    const updatedRocket: RocketLaunchEvent = {
+      ...activeRocket,
+      luckyPoolRemaining: nextRemaining,
+      claims: nextClaims,
+      status: isCompleted ? 'Completed' : 'ActivePool',
+    };
+
+    setActiveRocket(updatedRocket);
+    setLaunchHistory((prev) =>
+      prev.map((l) => (l.id === updatedRocket.id ? updatedRocket : l))
+    );
+    setUser((prev) => ({
+      ...prev,
+      coinBalance: prev.coinBalance + payout,
+    }));
+    setRoom((prev) => ({
+      ...prev,
+      chatMessages: [
+        ...prev.chatMessages,
+        {
+          id: `claim-chat-${Date.now()}`,
+          senderName: user.name,
+          senderUid: user.uid,
+          isMasked: user.hideIdEnabled && canHideId(user, false),
+          text: `Caught ${payout.toLocaleString()} coins from ${activeRocket.giftName} Lucky Pool (Slot ${nextClaims.length}/${activeRocket.catcherLimit}).`,
+          timestamp: nowTime().slice(0, 5),
+          type: 'system',
+        },
+      ],
+    }));
+  };
+
+  const handleSimulateRemainingClaims = () => {
+    if (!activeRocket) return;
+    const extraClaims = simulateRemainingClaims(
+      activeRocket.luckyPoolRemaining,
+      activeRocket.claims.length,
+      activeRocket.catcherLimit
+    );
+    const updatedRocket: RocketLaunchEvent = {
+      ...activeRocket,
+      luckyPoolRemaining: 0,
+      claims: [...activeRocket.claims, ...extraClaims],
+      status: 'Completed',
+    };
+    setActiveRocket(updatedRocket);
+    setLaunchHistory((prev) =>
+      prev.map((l) => (l.id === updatedRocket.id ? updatedRocket : l))
+    );
+  };
+
+  const handleRecharge = (totalCoins: number, label: string, usdPrice: number) => {
+    setUser((prev) => {
+      const nextUsd = Math.min(
+        RECHARGE_CEILING_USD,
+        prev.cumulativeRechargeUsd + usdPrice
+      );
+      const nextVip = Math.max(
+        prev.vipLevel,
+        VIP_SPECS.reduce(
+          (acc, s) => (nextUsd >= s.cumulativeUsdRequired ? s.level : acc),
+          0
+        )
+      );
+      const nextSvip = Math.max(
+        prev.svpLevel,
+        SVP_SPECS.reduce(
+          (acc, s) => (nextUsd >= s.cumulativeUsdRequired ? s.level : acc),
+          0
+        )
+      );
+      return {
+        ...prev,
+        coinBalance: prev.coinBalance + totalCoins,
+        cumulativeRechargeUsd: nextUsd,
+        vipLevel: nextVip,
+        svpLevel: nextSvip,
+      };
+    });
+    appendAudit(
+      'Merchant',
+      `Redeemed ${label} ($${usdPrice.toLocaleString()} · +${formatMillionsLabel(totalCoins)} coins, 10x return)`,
+      `UID ${user.uid}`
+    );
+    setRechargeModalOpen(false);
+  };
+
+  const handleIssueMerchantTopUp = (targetUid: string, baseCoins: number) => {
+    const totalCredited = baseCoins * economy.rechargeBonusMultiplier;
+    const bonusCoins = totalCredited - baseCoins;
+    const newTx: MerchantTransaction = {
+      id: `MTX-${Math.floor(400 + Math.random() * 599)}`,
+      merchantName: 'Pacific Coin Desk',
+      targetUid,
+      baseCoins,
+      bonusCoins,
+      totalCredited,
+      timestamp: nowTime().slice(0, 5),
+    };
+    setMerchantTxs((prev) => [newTx, ...prev]);
+    if (targetUid === user.uid) {
+      setUser((prev) => ({
+        ...prev,
+        coinBalance: prev.coinBalance + totalCredited,
+      }));
+    }
+    appendAudit(
+      'Merchant',
+      `Issued 10x Recharge (${totalCredited.toLocaleString()} coins)`,
+      `UID ${targetUid}`
+    );
+  };
+
+  const userMasked = user.hideIdEnabled && canHideId(user, false);
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+      <TopBar
+        activeSection={activeSection}
+        onSelectSection={setActiveSection}
+        onOpenRecharge={() => setRechargeModalOpen(true)}
+      />
+
+      {/* Workspace Session Context Strip (below TopBar) */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-[1440px] mx-auto px-6 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs">
+          <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-slate-700">
+            <span className="font-sans font-semibold text-slate-900">
+              {user.name}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>{formatUidDisplay(user.uid, userMasked)}</span>
+            <span aria-hidden="true">·</span>
+            <span>Lv.{user.level}/200</span>
+            <span aria-hidden="true">·</span>
+            <span>VIP {user.vipLevel}/5</span>
+            <span aria-hidden="true">·</span>
+            <span>SVIP {user.svpLevel}/15</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              ${user.cumulativeRechargeUsd.toLocaleString()}/${RECHARGE_CEILING_USD.toLocaleString()}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="font-semibold text-blue-700">
+              {formatCoins(user.coinBalance)} Coins
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              1M Studio:{' '}
+              {canCreateCustom1MGift(user) ? 'Unlocked' : 'Locked'}
+            </span>
+          </div>
+
+          {/* Quick Persona Testing Presets */}
+          <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg">
+            <button
+              type="button"
+              onClick={() =>
+                setUser((prev) => ({
+                  ...prev,
+                  level: 154,
+                  vipLevel: 5,
+                  svpLevel: 5,
+                  cumulativeRechargeUsd: 2500,
+                  hideIdEnabled: false,
+                }))
+              }
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                user.level >= 150 && user.svpLevel >= 4
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              SVIP 5 / VIP 5 / Lv.154
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setUser((prev) => ({
+                  ...prev,
+                  level: 42,
+                  vipLevel: 3,
+                  svpLevel: 2,
+                  cumulativeRechargeUsd: 500,
+                  hideIdEnabled: false,
+                }))
+              }
+              className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                user.level < 150 && user.svpLevel < 4
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Standard Lv.42 / VIP 3
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Container */}
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-6 py-6">
+        {activeSection === 'boat' && (
+          <BoatRoomView
+            user={user}
+            room={room}
+            economy={economy}
+            gifts={gifts}
+            activeRocket={activeRocket}
+            launchHistory={launchHistory}
+            onToggleFollow={() =>
+              setUser((prev) => ({
+                ...prev,
+                isFollowingHost: !prev.isFollowingHost,
+              }))
+            }
+            onToggleBoatLock={() =>
+              setRoom((prev) => ({ ...prev, isLocked: !prev.isLocked }))
+            }
+            onToggleOwnerHideId={() =>
+              setRoom((prev) => ({ ...prev, ownerHideId: !prev.ownerHideId }))
+            }
+            onToggleUserHideId={() =>
+              setUser((prev) => ({
+                ...prev,
+                hideIdEnabled: canHideId(prev, false)
+                  ? !prev.hideIdEnabled
+                  : false,
+              }))
+            }
+            onLaunchGift={handleLaunchGift}
+            onClaimLuckyDrop={handleClaimLuckyDrop}
+            onSimulateRemainingClaims={handleSimulateRemainingClaims}
+            onSendChat={(text) =>
+              setRoom((prev) => ({
+                ...prev,
+                chatMessages: [
+                  ...prev.chatMessages,
+                  {
+                    id: `chat-${Date.now()}`,
+                    senderName: user.name,
+                    senderUid: user.uid,
+                    isMasked: userMasked,
+                    text,
+                    timestamp: nowTime().slice(0, 5),
+                    type: 'chat',
+                  },
+                ],
+              }))
+            }
+            onToggleSeatMute={(seatNum) =>
+              setRoom((prev) => ({
+                ...prev,
+                seats: prev.seats.map((s) =>
+                  s.seatNumber === seatNum ? { ...s, isMuted: !s.isMuted } : s
+                ) as BoatRoomState['seats'],
+              }))
+            }
+          />
+        )}
+
+        {activeSection === 'gifts' && (
+          <GiftAndCustomStudio
+            user={user}
+            economy={economy}
+            gifts={gifts}
+            onCreateCustomGift={(newGift) => {
+              setGifts((prev) => [newGift, ...prev]);
+              appendAudit(
+                'BoatOwner',
+                `Created Custom 1M+ Gift: ${newGift.name} (${formatCoins(newGift.coinCost)})`,
+                `UID ${user.uid}`
+              );
+            }}
+            onSendGiftToBoat={handleLaunchGift}
+            onRechargePackage={handleRecharge}
+          />
+        )}
+
+        {activeSection === 'progression' && (
+          <ProgressionSystemsView
+            user={user}
+            onUpdateUserProgression={(patch) =>
+              setUser((prev) => ({ ...prev, ...patch }))
+            }
+          />
+        )}
+
+        {activeSection === 'social' && (
+          <SocialFamilyView
+            user={user}
+            families={families}
+            onCreateFamily={(name, tag) => {
+              const newFam: FamilyEntity = {
+                id: `fam-${Date.now()}`,
+                name,
+                tag,
+                familyLevel: 1,
+                treasuryCoins: 0,
+                rocketWins: 0,
+                members: [
+                  {
+                    uid: user.uid,
+                    name: user.name,
+                    role: 'Patriarch',
+                    level: user.level,
+                    contributionCoins: 0,
+                  },
+                ],
+              };
+              setFamilies((prev) => [newFam, ...prev]);
+              setUser((prev) => ({ ...prev, familyId: newFam.id }));
+            }}
+            onJoinFamily={(familyId) =>
+              setUser((prev) => ({ ...prev, familyId }))
+            }
+            onContributeFamily={(familyId, coins) => {
+              if (user.coinBalance < coins) return;
+              setUser((prev) => ({
+                ...prev,
+                coinBalance: prev.coinBalance - coins,
+              }));
+              setFamilies((prev) =>
+                prev.map((fam) =>
+                  fam.id === familyId
+                    ? {
+                        ...fam,
+                        treasuryCoins: fam.treasuryCoins + coins,
+                        members: fam.members.map((m) =>
+                          m.uid === user.uid
+                            ? {
+                                ...m,
+                                contributionCoins: m.contributionCoins + coins,
+                              }
+                            : m
+                        ),
+                      }
+                    : fam
+                )
+              );
+            }}
+          />
+        )}
+
+        {activeSection === 'controls' && (
+          <ControlPanelsView
+            activeRole={activeRole}
+            onSelectRole={setActiveRole}
+            economy={economy}
+            onUpdateEconomy={setEconomy}
+            user={user}
+            onUpdateUser={(patch) => setUser((prev) => ({ ...prev, ...patch }))}
+            room={room}
+            onUpdateRoom={(patch) => setRoom((prev) => ({ ...prev, ...patch }))}
+            onToggleSeatMute={(seatNum) =>
+              setRoom((prev) => ({
+                ...prev,
+                seats: prev.seats.map((s) =>
+                  s.seatNumber === seatNum ? { ...s, isMuted: !s.isMuted } : s
+                ) as BoatRoomState['seats'],
+              }))
+            }
+            onVacateSeat={(seatNum) =>
+              setRoom((prev) => ({
+                ...prev,
+                seats: prev.seats.map((s) =>
+                  s.seatNumber === seatNum
+                    ? {
+                        ...s,
+                        occupantName: null,
+                        occupantUid: null,
+                        avatarUrl: null,
+                      }
+                    : s
+                ) as BoatRoomState['seats'],
+              }))
+            }
+            tickets={tickets}
+            onResolveTicket={(ticketId) => {
+              setTickets((prev) =>
+                prev.map((t) =>
+                  t.id === ticketId ? { ...t, status: 'Resolved' } : t
+                )
+              );
+              appendAudit('CSSupport', `Resolved ticket ${ticketId}`, ticketId);
+            }}
+            merchantTxs={merchantTxs}
+            onIssueMerchantTopUp={handleIssueMerchantTopUp}
+            auditLogs={auditLogs}
+            onAppendAudit={appendAudit}
+          />
+        )}
+      </main>
+
+      {/* Quick PURE 10x Recharge Modal */}
+      {rechargeModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="PURE 10x Recharge Cards"
+          className="fixed inset-0 z-50 bg-slate-950/60 flex items-center justify-center p-4"
+        >
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-display text-base font-semibold text-slate-900">
+                  PURE Branded Recharge Cards (10x Guaranteed Return)
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  1M to 100,000M coins · Advances VIP (1–5) &amp; SVIP (1–15) under the $20,000 ceiling.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRechargeModalOpen(false)}
+                aria-label="Close modal"
+                className="p-1.5 text-slate-500 hover:text-slate-900 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100 border-t border-slate-200 max-h-[380px] overflow-y-auto">
+              {RECHARGE_PACKAGES.map((pkg) => (
+                <div
+                  key={pkg.id}
+                  className="py-3 flex items-center justify-between gap-4 text-xs"
+                >
+                  <div>
+                    <div className="font-semibold text-slate-900">
+                      {pkg.cardCode} · ${pkg.usdPrice.toLocaleString()}
+                    </div>
+                    <div className="font-mono tabular-nums text-slate-500 mt-0.5">
+                      {formatCoins(pkg.baseCoins)} base +{' '}
+                      {formatCoins(pkg.bonusCoins)} bonus (10x Return)
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleRecharge(pkg.totalCoins, pkg.cardCode, pkg.usdPrice)
+                    }
+                    className="px-3.5 py-2 font-mono tabular-nums font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    +{formatMillionsLabel(pkg.totalCoins)}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

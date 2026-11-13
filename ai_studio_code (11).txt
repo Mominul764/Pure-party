@@ -1,0 +1,268 @@
+import React, { useState } from 'react';
+import { Plus, Users } from 'lucide-react';
+import { CP_TIERS, FRIENDSHIP_LEVELS } from '../data/economySpecs';
+import { FamilyEntity, UserProfile } from '../types/architecture';
+import { formatCoins } from '../utils/economyMath';
+
+interface SocialFamilyViewProps {
+  user: UserProfile;
+  families: FamilyEntity[];
+  onCreateFamily: (name: string, tag: string) => void;
+  onJoinFamily: (familyId: string) => void;
+  onContributeFamily: (familyId: string, coins: number) => void;
+}
+
+export const SocialFamilyView: React.FC<SocialFamilyViewProps> = ({
+  user,
+  families,
+  onCreateFamily,
+  onJoinFamily,
+  onContributeFamily,
+}) => {
+  const [newFamName, setNewFamName] = useState('');
+  const [newFamTag, setNewFamTag] = useState('');
+
+  const activeFamily =
+    families.find((f) => f.id === user.familyId) || families[0];
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFamName.trim() || !newFamTag.trim()) return;
+    onCreateFamily(newFamName.trim(), newFamTag.trim().toUpperCase().slice(0, 4));
+    setNewFamName('');
+    setNewFamTag('');
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Family Guild Architecture */}
+      <section className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-slate-900">
+              Family Guild System &amp; Treasury
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Active Guild: {activeFamily.name} [{activeFamily.tag}] · Level {activeFamily.familyLevel} · {activeFamily.rocketWins} Rocket Wins
+            </p>
+          </div>
+
+          <form onSubmit={handleCreate} className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={newFamName}
+              onChange={(e) => setNewFamName(e.target.value)}
+              placeholder="New family name"
+              className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+            />
+            <input
+              type="text"
+              value={newFamTag}
+              onChange={(e) => setNewFamTag(e.target.value)}
+              placeholder="TAG"
+              maxLength={4}
+              className="w-20 px-3 py-1.5 text-xs font-mono uppercase bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+            />
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create Family
+            </button>
+          </form>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Guild Selector */}
+          <div className="lg:col-span-5 space-y-3">
+            {families.map((fam) => {
+              const isMember = user.familyId === fam.id;
+              return (
+                <div
+                  key={fam.id}
+                  className={`p-4 rounded-lg border transition-colors ${
+                    isMember
+                      ? 'border-blue-600 bg-blue-50/40'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        {fam.name} <span className="font-mono text-xs text-slate-500">[{fam.tag}]</span>
+                      </div>
+                      <div className="text-xs text-slate-600 font-mono tabular-nums mt-0.5">
+                        Lv.{fam.familyLevel} · {fam.members.length} members · Treasury {formatCoins(fam.treasuryCoins)}
+                      </div>
+                    </div>
+
+                    {isMember ? (
+                      <button
+                        type="button"
+                        disabled={user.coinBalance < 100000}
+                        onClick={() => onContributeFamily(fam.id, 100000)}
+                        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                      >
+                        Donate 100K
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onJoinFamily(fam.id)}
+                        className="px-3 py-1.5 text-xs font-medium border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md transition-colors whitespace-nowrap cursor-pointer"
+                      >
+                        Switch Guild
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Active Family Roster */}
+          <div className="lg:col-span-7 overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] font-medium text-slate-500">
+                  <th className="py-2 pr-3">Member</th>
+                  <th className="py-2 px-3">UID</th>
+                  <th className="py-2 px-3">Guild Role</th>
+                  <th className="py-2 px-3 text-right">Level</th>
+                  <th className="py-2 pl-3 text-right">Rocket Contribution</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {activeFamily.members.map((m) => (
+                  <tr key={m.uid} className="hover:bg-slate-50">
+                    <td className="py-2.5 pr-3 font-medium text-slate-900 flex items-center gap-2">
+                      <Users className="w-3.5 h-3.5 text-slate-400" />
+                      {m.name}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-slate-500">
+                      {m.uid}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700">{m.role}</td>
+                    <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700">
+                      Lv.{m.level}
+                    </td>
+                    <td className="py-2.5 pl-3 text-right font-mono tabular-nums font-semibold text-slate-900">
+                      {m.contributionCoins.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* 15 CP Tiers + 10 Friendship Levels */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* 15 CP Tiers */}
+        <section className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-slate-900">
+              15 CP (Couple / Partner) Tiers
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Active CP Tier {user.cpTier} · Earned via mutual gifting and co-seated Boat Room SP splits.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto border-t border-slate-200">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[11px] font-medium text-slate-600">
+                <tr>
+                  <th className="py-2 px-3">Tier</th>
+                  <th className="py-2 px-3">Title</th>
+                  <th className="py-2 px-3 text-right">Required SP</th>
+                  <th className="py-2 px-3">Seat Bonus</th>
+                  <th className="py-2 px-3">Unlocks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {CP_TIERS.map((cp) => (
+                  <tr
+                    key={cp.tier}
+                    className={
+                      cp.tier === user.cpTier
+                        ? 'bg-blue-50/70'
+                        : 'hover:bg-slate-50'
+                    }
+                  >
+                    <td className="py-2 px-3 font-mono tabular-nums font-semibold text-slate-900">
+                      CP {cp.tier}
+                    </td>
+                    <td className="py-2 px-3 font-medium text-slate-900 whitespace-nowrap">
+                      {cp.title}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                      {cp.requiredSp.toLocaleString()}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-blue-700 whitespace-nowrap">
+                      {cp.seatBonus}
+                    </td>
+                    <td className="py-2 px-3 text-slate-600">{cp.perks}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* 10 Friendship Levels */}
+        <section className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-slate-900">
+              10 Friendship Levels
+            </h2>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Active Friendship Lv.{user.friendshipLevel} · Unlocks Video Call on Follow &amp; Lucky Pool priority.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto max-h-[420px] overflow-y-auto border-t border-slate-200">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-[11px] font-medium text-slate-600">
+                <tr>
+                  <th className="py-2 px-3">Lv</th>
+                  <th className="py-2 px-3">Rank</th>
+                  <th className="py-2 px-3 text-right">XP</th>
+                  <th className="py-2 px-3">Video &amp; Lucky Perks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {FRIENDSHIP_LEVELS.map((fr) => (
+                  <tr
+                    key={fr.level}
+                    className={
+                      fr.level === user.friendshipLevel
+                        ? 'bg-blue-50/70'
+                        : 'hover:bg-slate-50'
+                    }
+                  >
+                    <td className="py-2 px-3 font-mono tabular-nums font-semibold text-slate-900">
+                      F{fr.level}
+                    </td>
+                    <td className="py-2 px-3 font-medium text-slate-900 whitespace-nowrap">
+                      {fr.title}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-slate-600">
+                      {fr.requiredXp.toLocaleString()}
+                    </td>
+                    <td className="py-2 px-3 text-slate-600">
+                      <div>{fr.videoCallPerk}</div>
+                      <div className="text-amber-700 mt-0.5">{fr.luckyDropPerk}</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,8 @@
+{
+  "name": "HarborLive Architecture",
+  "description": "Interactive live streaming platform architecture with rocket gifting, dynamic 5% lucky pools across 10-50 claimants, 2% three-seat SP splits, 1-200 leveling, VIP 1-5 and SVIP 1-15 tiers, 100 gift tiers, 15 CP tiers, 10 friendship levels, and 6-role RBAC control panels.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

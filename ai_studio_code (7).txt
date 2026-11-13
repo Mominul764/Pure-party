@@ -1,0 +1,364 @@
+import {
+  BoatRoomState,
+  CpTierSpec,
+  EconomyConfig,
+  FamilyEntity,
+  FriendshipSpec,
+  GiftTier,
+  LevelSpec,
+  MerchantTransaction,
+  RechargePackage,
+  SupportTicket,
+  SvpSpec,
+  UserProfile,
+  VipSpec,
+} from '../types/architecture';
+
+export const ASSET_PATHS = {
+  boatBackdrop: '/src/assets/images/boat_stage_backdrop_1794543503080.jpg',
+  hostAvatar: '/src/assets/images/avatar_host_owner_1794543503762.jpg',
+  seatOneAvatar: '/src/assets/images/avatar_seat_one_1794543503826.jpg',
+  seatTwoAvatar: '/src/assets/images/avatar_seat_two_1794543503937.jpg',
+};
+
+export const DEFAULT_ECONOMY_CONFIG: EconomyConfig = {
+  receiverCoinBackPct: 40,
+  platformCommissionPct: 15,
+  luckyPoolPct: 5,
+  seatSpSplitPct: 2,
+  minCatcherLimit: 10,
+  maxCatcherLimit: 50,
+  rechargeBonusMultiplier: 10,
+};
+
+export const RECHARGE_CEILING_USD = 20000;
+
+export const INITIAL_USER: UserProfile = {
+  uid: '88492014',
+  name: 'Elena Vance',
+  avatarUrl: ASSET_PATHS.seatOneAvatar,
+  level: 154,
+  xp: 2845000,
+  vipLevel: 5,
+  svpLevel: 5,
+  cumulativeRechargeUsd: 2500,
+  hideIdEnabled: false,
+  coinBalance: 125000000,
+  spBalance: 320000,
+  familyId: 'fam-1',
+  cpTier: 8,
+  friendshipLevel: 7,
+  isFollowingHost: false,
+};
+
+export const INITIAL_BOAT_ROOM: BoatRoomState = {
+  roomId: 'BOAT-409',
+  roomName: 'Harbor Sovereign Deck',
+  hostName: 'Marcus Sterling',
+  hostUid: '10024891',
+  hostAvatarUrl: ASSET_PATHS.hostAvatar,
+  hostLevel: 178,
+  hostSvp: 8,
+  hostVip: 7,
+  isLocked: false,
+  lockPin: '4820',
+  ownerHideId: false,
+  viewerCount: 1428,
+  totalReceiverCoinBack: 8420000,
+  seats: [
+    {
+      seatNumber: 1,
+      occupantName: 'Elena Vance',
+      occupantUid: '88492014',
+      avatarUrl: ASSET_PATHS.seatOneAvatar,
+      isMuted: false,
+      spEarned: 148200,
+    },
+    {
+      seatNumber: 2,
+      occupantName: 'Liam Mercer',
+      occupantUid: '55102938',
+      avatarUrl: ASSET_PATHS.seatTwoAvatar,
+      isMuted: false,
+      spEarned: 148200,
+    },
+    {
+      seatNumber: 3,
+      occupantName: 'Nadia Chen',
+      occupantUid: '33910422',
+      avatarUrl: null,
+      isMuted: false,
+      spEarned: 148200,
+    },
+  ],
+  chatMessages: [
+    {
+      id: 'msg-1',
+      senderName: 'System',
+      senderUid: '000000',
+      isMasked: false,
+      text: 'Boat Room HARBOR-409 initialized with 2% three-seat SP split and 5% dynamic lucky pool.',
+      timestamp: '20:14',
+      type: 'system',
+    },
+    {
+      id: 'msg-2',
+      senderName: 'Liam Mercer',
+      senderUid: '55102938',
+      isMasked: false,
+      text: 'Ready for the 5M Lucky Back launch on Seat 2.',
+      timestamp: '20:16',
+      type: 'chat',
+    },
+  ],
+};
+
+// 1 to 200 Leveling Curve
+export const LEVEL_SPECS: LevelSpec[] = Array.from({ length: 200 }, (_, idx) => {
+  const level = idx + 1;
+  const xpRequired = Math.round(100 * Math.pow(level, 1.85));
+  const cumulativeXp = Math.round((xpRequired * level) / 2.6);
+  let bracket = 'Deckhand (1–40)';
+  if (level > 160) bracket = 'Admiral Sovereign (161–200)';
+  else if (level > 120) bracket = 'Commodore (121–160)';
+  else if (level > 80) bracket = 'Navigator (81–120)';
+  else if (level > 40) bracket = 'Helmsman (41–80)';
+
+  let unlockNote = 'Standard chat & gifting';
+  if (level === 10) unlockNote = 'Family Guild membership';
+  else if (level === 25) unlockNote = 'Boat Seat guest priority';
+  else if (level === 50) unlockNote = 'Rocket launch entrance banner';
+  else if (level === 100) unlockNote = 'Century nameplate & 1.2x XP';
+  else if (level === 150) unlockNote = 'Custom 1M Coin Gift Creation unlocked';
+  else if (level === 180) unlockNote = 'Multi-tier 20M Lucky Back host badge';
+  else if (level === 200) unlockNote = 'Apex Level 200 Sovereign Crown';
+  else if (level > 150) unlockNote = 'Custom 1M Coin Gift active + Apex frame';
+
+  return {
+    level,
+    bracket,
+    xpRequired,
+    cumulativeXp,
+    unlockNote,
+  };
+});
+
+// 5-Tier VIP Progression connected under the $20,000 cumulative recharge ceiling (Hide ID unlocked at Level 5)
+export const VIP_SPECS: VipSpec[] = [
+  { level: 1, title: 'VIP 1 · Harbor Pass', cumulativeUsdRequired: 50, coinReward: 500_000, hideIdUnlocked: false, entryEffect: 'Silver ripple entrance', perks: 'Priority room entry, +5% chat highlight' },
+  { level: 2, title: 'VIP 2 · Mariner', cumulativeUsdRequired: 200, coinReward: 2_000_000, hideIdUnlocked: false, entryEffect: 'Slate crest banner', perks: 'Custom profile border, 2 daily seat requests' },
+  { level: 3, title: 'VIP 3 · Quartermaster', cumulativeUsdRequired: 500, coinReward: 5_000_000, hideIdUnlocked: false, entryEffect: 'Cobalt wake trail', perks: 'Anti-kick protection in standard rooms' },
+  { level: 4, title: 'VIP 4 · First Mate', cumulativeUsdRequired: 1000, coinReward: 10_000_000, hideIdUnlocked: false, entryEffect: 'Amber harbor flare', perks: 'Dedicated merchant desk priority' },
+  { level: 5, title: 'VIP 5 · Stealth Captain', cumulativeUsdRequired: 2000, coinReward: 20_000_000, hideIdUnlocked: true, entryEffect: 'Stealth obsidian cloak', perks: 'Hide ID unlocked · Masked UID in rooms & logs' },
+];
+
+// 15-Tier SVIP Progression connected under the $20,000 cumulative recharge ceiling (Coin rewards up to 10 Billion at peak)
+export const SVP_SPECS: SvpSpec[] = [
+  { level: 1, title: 'SVIP 1 · Bronze Initiate', cumulativeUsdRequired: 250, coinReward: 2_500_000, customGiftUnlocked: false, giftBonusMultiplier: '1.05x XP', perks: 'SVIP emblem + lucky pool priority queue' },
+  { level: 2, title: 'SVIP 2 · Silver Envoy', cumulativeUsdRequired: 500, coinReward: 5_000_000, customGiftUnlocked: false, giftBonusMultiplier: '1.10x XP', perks: 'Custom seat aura + 20% faster cooldown' },
+  { level: 3, title: 'SVIP 3 · Gold Vanguard', cumulativeUsdRequired: 1000, coinReward: 15_000_000, customGiftUnlocked: false, giftBonusMultiplier: '1.15x XP', perks: 'Room-wide rocket horn + priority support' },
+  { level: 4, title: 'SVIP 4 · Platinum Architect', cumulativeUsdRequired: 1800, coinReward: 35_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.25x XP', perks: 'Unlocks Custom 1 Million Coin Gift Creation' },
+  { level: 5, title: 'SVIP 5 · Sapphire Sovereign', cumulativeUsdRequired: 2500, coinReward: 75_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.35x XP', perks: 'Custom 1M+ Gift Studio + 10–50 catcher tuning' },
+  { level: 6, title: 'SVIP 6 · Obsidian Baron', cumulativeUsdRequired: 3500, coinReward: 150_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.45x XP', perks: 'Custom Rocket trails + global ticker broadcast' },
+  { level: 7, title: 'SVIP 7 · Crimson Commodore', cumulativeUsdRequired: 5000, coinReward: 300_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.55x XP', perks: 'Multi-room lucky back burst + VIP 5 stealth sync' },
+  { level: 8, title: 'SVIP 8 · Cobalt Admiral', cumulativeUsdRequired: 6500, coinReward: 600_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.65x XP', perks: '20M Lucky Back co-branding + dedicated steward' },
+  { level: 9, title: 'SVIP 9 · Imperial Duke', cumulativeUsdRequired: 8000, coinReward: 1_000_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.75x XP', perks: '1 Billion coin tier milestone + room takeover banner' },
+  { level: 10, title: 'SVIP 10 · Astral Regent', cumulativeUsdRequired: 10000, coinReward: 1_750_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.85x XP', perks: 'Mid-ceiling ($10k) fleet aura + custom entrance audio' },
+  { level: 11, title: 'SVIP 11 · Zenith Chancellor', cumulativeUsdRequired: 12000, coinReward: 2_800_000_000, customGiftUnlocked: true, giftBonusMultiplier: '1.95x XP', perks: 'Family treasury boost + priority 50-slot lucky pools' },
+  { level: 12, title: 'SVIP 12 · Sovereign Archon', cumulativeUsdRequired: 14000, coinReward: 4_200_000_000, customGiftUnlocked: true, giftBonusMultiplier: '2.05x XP', perks: 'PURE Card VIP rebate + cross-boat rocket echo' },
+  { level: 13, title: 'SVIP 13 · Celestial Warden', cumulativeUsdRequired: 16000, coinReward: 6_000_000_000, customGiftUnlocked: true, giftBonusMultiplier: '2.15x XP', perks: '6 Billion coin reward tier + private harbor lounge' },
+  { level: 14, title: 'SVIP 14 · Apex Luminary', cumulativeUsdRequired: 18000, coinReward: 8_000_000_000, customGiftUnlocked: true, giftBonusMultiplier: '2.30x XP', perks: '8 Billion coin reward tier + global concierge desk' },
+  { level: 15, title: 'SVIP 15 · Eternal Monarch', cumulativeUsdRequired: 20000, coinReward: 10_000_000_000, customGiftUnlocked: true, giftBonusMultiplier: '2.50x XP', perks: 'Peak $20,000 ceiling · 10 Billion coin reward + unlimited 1M+ gifts' },
+];
+
+// 100 Gift Tiers (including Rockets and Multi-Tier Lucky Backs up to 20M coins)
+const GIFT_PREFIXES = [
+  'Harbor', 'Signal', 'Compass', 'Lantern', 'Anchor', 'Beacon', 'Vanguard', 'Atlas', 'Zenith', 'Sovereign',
+];
+const GIFT_NOUNS = [
+  'Spark', 'Wave', 'Flare', 'Helm', 'Crest', 'Trident', 'Galleon', 'Cruiser', 'Rocket', 'Lucky Back',
+];
+
+export const GIFT_TIERS: GiftTier[] = Array.from({ length: 100 }, (_, idx) => {
+  const tier = idx + 1;
+  let coinCost = 10;
+  if (tier <= 20) coinCost = tier * 25;
+  else if (tier <= 40) coinCost = 500 + (tier - 20) * 475;
+  else if (tier <= 60) coinCost = 10000 + (tier - 40) * 4500;
+  else if (tier <= 80) coinCost = 100000 + (tier - 60) * 45000;
+  else if (tier < 95) coinCost = 1000000 + (tier - 80) * 500000;
+  else {
+    const megaLadder = [10000000, 12000000, 14000000, 16000000, 18000000, 20000000];
+    coinCost = megaLadder[tier - 95];
+  }
+
+  const isLuckyBack = tier >= 85 || tier % 10 === 0;
+  const isRocket = tier >= 50 && (tier % 5 === 0 || tier >= 90);
+  const category = isLuckyBack ? 'LuckyBack' : isRocket ? 'Rocket' : 'Standard';
+
+  const prefix = GIFT_PREFIXES[idx % GIFT_PREFIXES.length];
+  const noun = isLuckyBack
+    ? 'Lucky Back'
+    : isRocket
+      ? 'Launch Rocket'
+      : GIFT_NOUNS[Math.floor(idx / 10) % GIFT_NOUNS.length];
+
+  const defaultCatcherLimit = tier >= 95 ? 50 : tier >= 80 ? 35 : tier >= 50 ? 25 : 10;
+
+  return {
+    id: `gift-tier-${tier}`,
+    tier,
+    name: `T${tier} ${prefix} ${noun}`,
+    category,
+    coinCost,
+    isRocket,
+    isLuckyBack,
+    defaultCatcherLimit,
+    xpYield: Math.round(coinCost * 0.5),
+    spYield: Math.round(coinCost * 0.02),
+  };
+});
+
+// 15 CP (Couple / Partner) Tiers
+export const CP_TIERS: CpTierSpec[] = Array.from({ length: 15 }, (_, idx) => {
+  const tier = idx + 1;
+  const titles = [
+    'First Glance', 'Harbor Oath', 'Twin Compass', 'Silver Knot', 'Tide Bond',
+    'Amber Beacon', 'Starboard Pair', 'Obsidian Ring', 'Velvet Horizon', 'Dual Trident',
+    'Sovereign Vow', 'Celestial Wake', 'Imperial Crown', 'Infinite Orbit', 'Eternal Dynasty',
+  ];
+  const requiredSp = Math.round(5000 * Math.pow(tier, 2.2));
+  return {
+    tier,
+    title: titles[idx],
+    requiredSp,
+    emblem: `CP-${tier} Crest`,
+    seatBonus: `+${(tier * 0.5).toFixed(1)}% Co-Seat SP Aura`,
+    perks:
+      tier >= 10
+        ? 'Full-room CP arrival banner, shared Boat Seat lock immunity, 2-way video ring'
+        : tier >= 5
+          ? 'Shared couple seat halo, custom chat tag, +5% XP when seated together'
+          : 'Partner profile link, shared gifting streak counter',
+  };
+});
+
+// 10 Friendship Levels
+export const FRIENDSHIP_LEVELS: FriendshipSpec[] = Array.from({ length: 10 }, (_, idx) => {
+  const level = idx + 1;
+  const titles = [
+    'Acquaintance', 'Deck Mate', 'Signal Ally', 'Watch Partner', 'Trusted Crew',
+    'Sworn Companion', 'Inner Circle', 'First Confidant', 'Blood Oath', 'Lifelong Anchor',
+  ];
+  const requiredXp = Math.round(1200 * Math.pow(level, 2.05));
+  return {
+    level,
+    title: titles[idx],
+    requiredXp,
+    videoCallPerk:
+      level >= 6
+        ? 'Instant HD Video Call on Follow (zero cooldown)'
+        : level >= 3
+          ? 'Standard 1-on-1 Video Call enabled on Follow'
+          : 'Voice ping on Follow; Video Call unlocks at Level 3',
+    luckyDropPerk:
+      level >= 8
+        ? '+12% priority window on friend Rocket Lucky Pools'
+        : level >= 4
+          ? '+5% Lucky Pool claim assist'
+          : 'Standard 10–50 claimant pool eligibility',
+  };
+});
+
+// 'PURE' Branded Recharge Cards ranging from 1 Million to 100,000 Million (10x guaranteed return)
+export const RECHARGE_PACKAGES: RechargePackage[] = [
+  { id: 'pure-1m', brand: 'PURE', cardCode: 'PURE-1M', label: 'PURE 1M Card', usdPrice: 10, baseCoins: 100_000, bonusMultiplier: 10, bonusCoins: 900_000, totalCoins: 1_000_000 },
+  { id: 'pure-10m', brand: 'PURE', cardCode: 'PURE-10M', label: 'PURE 10M Card', usdPrice: 50, baseCoins: 1_000_000, bonusMultiplier: 10, bonusCoins: 9_000_000, totalCoins: 10_000_000 },
+  { id: 'pure-100m', brand: 'PURE', cardCode: 'PURE-100M', label: 'PURE 100M Card', usdPrice: 250, baseCoins: 10_000_000, bonusMultiplier: 10, bonusCoins: 90_000_000, totalCoins: 100_000_000 },
+  { id: 'pure-500m', brand: 'PURE', cardCode: 'PURE-500M', label: 'PURE 500M Card', usdPrice: 1000, baseCoins: 50_000_000, bonusMultiplier: 10, bonusCoins: 450_000_000, totalCoins: 500_000_000 },
+  { id: 'pure-1000m', brand: 'PURE', cardCode: 'PURE-1,000M', label: 'PURE 1,000M Card', usdPrice: 2000, baseCoins: 100_000_000, bonusMultiplier: 10, bonusCoins: 900_000_000, totalCoins: 1_000_000_000 },
+  { id: 'pure-10000m', brand: 'PURE', cardCode: 'PURE-10,000M', label: 'PURE 10,000M Card', usdPrice: 5000, baseCoins: 1_000_000_000, bonusMultiplier: 10, bonusCoins: 9_000_000_000, totalCoins: 10_000_000_000 },
+  { id: 'pure-50000m', brand: 'PURE', cardCode: 'PURE-50,000M', label: 'PURE 50,000M Card', usdPrice: 10000, baseCoins: 5_000_000_000, bonusMultiplier: 10, bonusCoins: 45_000_000_000, totalCoins: 50_000_000_000 },
+  { id: 'pure-100000m', brand: 'PURE', cardCode: 'PURE-100,000M', label: 'PURE 100,000M Peak Card', usdPrice: 20000, baseCoins: 10_000_000_000, bonusMultiplier: 10, bonusCoins: 90_000_000_000, totalCoins: 100_000_000_000 },
+];
+
+export const INITIAL_FAMILIES: FamilyEntity[] = [
+  {
+    id: 'fam-1',
+    name: 'NorthStar Armada',
+    tag: 'NSA',
+    familyLevel: 18,
+    treasuryCoins: 42500000,
+    rocketWins: 142,
+    members: [
+      { uid: '10024891', name: 'Marcus Sterling', role: 'Patriarch', level: 178, contributionCoins: 18400000 },
+      { uid: '88492014', name: 'Elena Vance', role: 'Elder', level: 154, contributionCoins: 11200000 },
+      { uid: '55102938', name: 'Liam Mercer', role: 'Captain', level: 131, contributionCoins: 7600000 },
+      { uid: '33910422', name: 'Nadia Chen', role: 'Member', level: 88, contributionCoins: 5300000 },
+    ],
+  },
+  {
+    id: 'fam-2',
+    name: 'Obsidian Fleet',
+    tag: 'OBS',
+    familyLevel: 15,
+    treasuryCoins: 29800000,
+    rocketWins: 96,
+    members: [
+      { uid: '77412005', name: 'Victor Kael', role: 'Patriarch', level: 165, contributionCoins: 14200000 },
+      { uid: '66219833', name: 'Sora Takahashi', role: 'Elder', level: 144, contributionCoins: 9100000 },
+      { uid: '44810299', name: 'Devon Brooks', role: 'Member', level: 92, contributionCoins: 6500000 },
+    ],
+  },
+];
+
+export const INITIAL_TICKETS: SupportTicket[] = [
+  {
+    id: 'TKT-9041',
+    userUid: '55102938',
+    userName: 'Liam Mercer',
+    category: 'Recharge 10x',
+    summary: 'Purchased $100 Rocket Fuel pack; verifying 900,000 bonus coins credited alongside 100,000 base.',
+    status: 'Open',
+    createdAt: '19:42',
+  },
+  {
+    id: 'TKT-9042',
+    userUid: '33910422',
+    userName: 'Nadia Chen',
+    category: 'Hide ID / VIP',
+    summary: 'User at VIP 4 requesting Hide ID mask preview; policy requires VIP 5+ or Boat Owner status.',
+    status: 'Investigating',
+    createdAt: '19:58',
+  },
+  {
+    id: 'TKT-9043',
+    userUid: '66219833',
+    userName: 'Sora Takahashi',
+    category: 'Lucky Pool',
+    summary: 'Claimed slot #14 on 5M Rocket Lucky Back; confirming 5% pool payout ledger accuracy.',
+    status: 'Open',
+    createdAt: '20:09',
+  },
+];
+
+export const INITIAL_MERCHANT_TXS: MerchantTransaction[] = [
+  {
+    id: 'MTX-301',
+    merchantName: 'Pacific Coin Desk',
+    targetUid: '88492014',
+    baseCoins: 500000,
+    bonusCoins: 4500000,
+    totalCredited: 5000000,
+    timestamp: '19:30',
+  },
+  {
+    id: 'MTX-302',
+    merchantName: 'Pacific Coin Desk',
+    targetUid: '10024891',
+    baseCoins: 1000000,
+    bonusCoins: 9000000,
+    totalCredited: 10000000,
+    timestamp: '20:02',
+  },
+];
